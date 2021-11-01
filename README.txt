@@ -25,3 +25,8 @@ The system allows the use of a "3rd party" router, without putting it in the HH2
 
 
 Nothing's done yet.
+
+/======================================================================\
+| BT_PPPOE derived from https://github.com/gregnietsky/simpletun       |
+| RP_PPPOE_BT derived from https://dianne.skoll.ca/projects/rp-pppoe/  |
+\======================================================================/
