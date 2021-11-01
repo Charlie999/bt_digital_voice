@@ -9,6 +9,7 @@ network structure
 
 RP_PPPOE_BT & BT_PPPOE can be ran on the same machine.
 
+The system allows the use of a "3rd party" router, without putting it in the HH2's DMZ.
 
 ======[ BT_PPPOE    ]======
 
