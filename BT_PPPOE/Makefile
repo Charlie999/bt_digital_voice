@@ -11,8 +11,8 @@ clean:
 	rm bt_pppoe
 
 
-install: all
-	$(INSTALL) -D bt_pppoe $(DESTDIR)$(BINDIR)/bt_pppoe
+#install: all
+#	$(INSTALL) -D bt_pppoe $(DESTDIR)$(BINDIR)/bt_pppoe
 
 macmask:
-	$(CC) bt_pppoe.c -o bt_pppoe
+	$(CC) bt_pppoe.c -o bt_pppoe -g

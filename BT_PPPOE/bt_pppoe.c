@@ -1,27 +1,3 @@
-/**************************************************************************
- * simpletun.c                                                            *
- *                                                                        *
- * A simplistic, simple-minded, naive tunnelling program using tun/tap    *
- * interfaces and TCP. DO NOT USE THIS PROGRAM FOR SERIOUS PURPOSES.      *
- *                                                                        *
- * You have been warned.                                                  *
- *                                                                        *
- * (C) 2010 Davide Brini.                                                 *
- *                                                                        *
- * DISCLAIMER AND WARNING: this is all work in progress. The code is      *
- * ugly, the algorithms are naive, error checking and input validation    *
- * are very basic, and of course there can be bugs. If that's not enough, *
- * the program has not been thoroughly tested, so it might even fail at   *
- * the few simple things it should be supposed to do right.               *
- * Needless to say, I take no responsibility whatsoever for what the      *
- * program might do. The program has been written mostly for learning     *
- * purposes, and can be used in the hope that is useful, but everything   *
- * is to be taken "as is" and without any kind of warranty, implicit or   *
- * explicit. See the file LICENSE for further details.                    *
- *************************************************************************/ 
-
-// and now we use it for serious purposes! YAY!
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,15 +17,20 @@
 #include <stdarg.h>
 
 #include "pppoe.h"
+#include "control.h"
 
 #define BUFSIZE 1600
 void my_err(char *msg, ...);
 
-char* HU = "PC1";
+char HU[17] = "PC1";
 short HUL = 3;
+
+int PORT = 3334;
 
 char *progname;
 int debug = 1;
+
+#define CONTROL_MAGIC 0xBEEFF00DBEEFF00D
 
 /**************************************************************************
  * tun_alloc: allocates or reconnects to a tun/tap device. The caller     *
@@ -203,7 +184,134 @@ void usage(void) {
 
 char LHU[256] = {0};
 short LHUL = 0;
-short SID = 0;
+short SID = -1;
+
+unsigned char ROUTER_MAC[8];
+unsigned char ONT_MAC[8];
+
+// handle control packets
+void control(unsigned char* buffer, int *l, int *act, int *act2, unsigned char* retbuf, unsigned char* retbuf2) {
+ int len = *l;
+ if (len != sizeof(struct ctrlmsg)) {
+  fprintf(stderr, "[CTRL] Got invalid control message of length %d\n",len);
+  *l = 0;
+  return;
+ }
+
+ struct ctrlmsg *msg = (struct ctrlmsg*)buffer;
+ if (msg->magic != CONTROL_MAGIC) {
+  fprintf(stderr, "[CTRL] Got invalid control message with magic 0x%16X\n",msg->magic);
+  *l = 0;
+  return;
+ }
+
+ if (msg->type == CTRL_SET_HOSTUNIQ) {
+  int dlen = (msg->dlen > 16)?16:msg->dlen;
+  fprintf(stderr, "[CTRL] Set Host_Uniq to ");
+  for (int i=0;i<dlen;i++) fprintf(stderr, "%02X", msg->data[i]);
+  fprintf(stderr, "\n");
+  memcpy(HU, msg->data, dlen);
+  HUL = dlen;
+ } else if (msg->type == CTRL_GET_HOSTUNIQ) {
+  fprintf(stderr, "[CTRL] Host_Uniq requested via control\n");
+  msg->type = CTRL_RESP_HOSTUNIQ;
+  memset(msg->data, 0, 16);
+  memcpy(msg->data, HU, HUL);
+  msg->dlen = HUL;
+
+  *l = sizeof(struct ctrlmsg);
+
+  return;
+ } else if (msg->type == CTRL_GET_LASTHOSTUNIQ) {
+  fprintf(stderr, "[CTRL] LAST Host_Uniq requested via control socket\n");
+  msg->type = CTRL_RESP_LASTHOSTUNIQ;
+  memset(msg->data, 0, 16);
+  memcpy(msg->data, LHU, LHUL);
+  msg->dlen = LHUL;
+
+  *l = sizeof(struct ctrlmsg);
+
+  return;
+ } else if (msg->type == CTRL_GET_SESSID) {
+  fprintf(stderr, "[CTRL] PPPoE session ID requested via control socket\n");
+
+  msg->type = CTRL_RESP_SESSID;
+  memset(msg->data, 0, 16);
+  msg->dlen = 2;
+  memcpy(msg->data, &SID, 2);
+
+  *l = sizeof(struct ctrlmsg);
+
+  return;
+ } else if (msg->type == CTRL_SEND_PADT) {
+
+  int dlen = (msg->dlen > 16)?16:msg->dlen;
+
+  memset(retbuf, 0, 256);
+  memset(retbuf2, 0, 256);
+
+  int off = sizeof(struct ethhdr) + sizeof(struct padhdr) + 4;
+
+  struct ethhdr* pakhdr = (struct ethhdr*)retbuf;
+  struct padhdr* padhdr = (struct padhdr*)(retbuf + sizeof(struct ethhdr));
+
+  padhdr->code = 167;
+  padhdr->vertype = 0x11;
+  padhdr->len = htons(HUL + 4 + 5);
+  padhdr->sessid = htons(SID);
+
+  memcpy(pakhdr->h_source, ROUTER_MAC, 6);
+  memcpy(pakhdr->h_dest, ONT_MAC, 6);
+  pakhdr->h_proto = htons(0x8863);
+
+  retbuf[off-1] = HUL;
+  retbuf[off-3] = 0x03;
+  retbuf[off-4] = 0x01;
+  memset(retbuf+off, 0, 16);
+  memcpy(retbuf+off, HU, HUL);
+
+  retbuf[off + HUL] = 0x01;
+  retbuf[off + HUL + 1] = 0x05;
+  retbuf[off + HUL + 2] = 0x00;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  retbuf[off + HUL + 3] = 0x01;
+  retbuf[off + HUL + 4] = 0xFF;
+
+  memcpy(retbuf2, retbuf, 256);
+
+  fprintf(stderr, "[CTRL] PPPoE PADT send requested via control socket [s=%d]\n",off+18);
+
+  *act = off + HUL + 5;
+  *act2 = off + HUL + 5;
+ }
+
+ *l = 0;
+}
 
 // handle PPPoE packets
 void handle(unsigned char* buffer, int *l) {
@@ -218,6 +326,8 @@ void handle(unsigned char* buffer, int *l) {
   hdbg("PPPoE discovery packet, code=%d, sessid=%04X, len=%d\n",pad->code,sessid,len);
 
   if (pad->code == 9) { // PADI PACKET
+   memcpy(ROUTER_MAC, hdr->h_source, 6);
+
    hdbg("Setting PPPoE Host-Uniq value to [");
    for (int i=0;i<HUL;i++) fprintf(stderr,"%02X",HU[i]);
    fprintf(stderr,", l=%d]\n",HUL);
@@ -247,6 +357,8 @@ void handle(unsigned char* buffer, int *l) {
 
    *l = lr;
   } else if (pad->code == 7) { //PADO PACKET
+   memcpy(ONT_MAC, hdr->h_source, 6);
+
    hdbg("Setting PADO Host-Uniq code\n");
 
    unsigned char* ptr = (unsigned char*)(buffer + sizeof(struct ethhdr) + sizeof(struct padhdr));
@@ -295,6 +407,12 @@ void handle(unsigned char* buffer, int *l) {
   } else if (pad->code == 101) { //PADS PACKET
    printf("==> PADS SESSION ID = 0x%04X\n",sessid);
    SID = sessid;
+
+   printf("==> ROUTER: ");
+   for (int i=0;i<5;i++) printf("%02X:",ROUTER_MAC[i]);
+   printf("%02X  ONT: ",ROUTER_MAC[5]);
+   for (int i=0;i<5;i++) printf("%02X:",ONT_MAC[i]);
+   printf("%02X\n",ONT_MAC[5]);
 
    hdbg("Setting PADS Host-Uniq code\n");
 
@@ -364,11 +482,31 @@ void handle(unsigned char* buffer, int *l) {
 
 int main(int argc, char *argv[]) {
   
-  int tap1_fd, tap2_fd, option, nread, nwrite, maxfd;
+/*  struct ctrlmsg kmsg;
+
+  memset(&kmsg, 0, sizeof(struct ctrlmsg));
+
+  kmsg.magic = CONTROL_MAGIC;
+  kmsg.type = CTRL_SET_HOSTUNIQ;
+  kmsg.dlen = 4;
+  char *huk = "\x11\x12\x13\x14";
+  memcpy(kmsg.data, huk, kmsg.dlen);
+
+  unsigned char *qmsg = (unsigned char*)&kmsg;
+
+  printf("=> ");
+  for (int i=0;i<sizeof(struct ctrlmsg);i++) printf("%02X",qmsg[i]);
+  printf("\n");
+
+  exit(0);
+*/
+  int tap1_fd, tap2_fd, option, nread, nwrite, maxfd, sockfd;
   char i1_name[IFNAMSIZ] = "";
   char i2_name[IFNAMSIZ] = "";
   int flags = IFF_TAP;
   unsigned char buffer[1600];
+
+  int slen = sizeof(struct sockaddr_in);
 
   progname = argv[0];
   
@@ -426,15 +564,42 @@ int main(int argc, char *argv[]) {
 
   fprintf(stderr, "Successfully connected to interfaces %s/%s\n", i1_name, i2_name);
 
+  struct sockaddr_in si_me, si_other;
+
+  if ((sockfd=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+   perror("socket()");
+   exit(1);
+  }
+
+  memset((char *) &si_me, 0, sizeof(si_me));
+
+  si_me.sin_family = AF_INET;
+  si_me.sin_port = htons(PORT);
+  si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+
+  if( bind(sockfd , (struct sockaddr*)&si_me, sizeof(si_me) ) == -1) {
+    perror("bind()");
+    exit(1);
+  }
+
+  fprintf(stderr, "Created control socket\n");
+
   /* use select() to handle two descriptors at once */
   maxfd = (tap1_fd > tap2_fd)?tap1_fd:tap2_fd;
+  maxfd = (maxfd > sockfd)?maxfd:sockfd;
+
+  int act = 0;
+  int act2 = 0;
+  unsigned char retbuf[257], retbuf2[257];
 
   while(1) {
     int ret;
     fd_set rd_set;
 
+    nwrite = 0;
+
     FD_ZERO(&rd_set);
-    FD_SET(tap1_fd, &rd_set); FD_SET(tap2_fd, &rd_set);
+    FD_SET(tap1_fd, &rd_set); FD_SET(tap2_fd, &rd_set); FD_SET(sockfd, &rd_set);
 
     ret = select(maxfd + 1, &rd_set, NULL, NULL, NULL);
 
@@ -445,6 +610,16 @@ int main(int argc, char *argv[]) {
     if (ret < 0) {
       perror("select()");
       exit(1);
+    }
+
+    if (act2) {
+        cwrite(tap2_fd, retbuf2, act2);
+        printf("[CTRL] Sent retbuf2 [s=%d]\n", act2);
+        act2 = 0;
+    } else if (act) {
+        cwrite(tap1_fd, retbuf, act);
+        printf("[CTRL] Sent retbuf1 [s=%d]\n", act);
+        act = 0;
     }
 
     if(FD_ISSET(tap1_fd, &rd_set)) {
@@ -467,6 +642,21 @@ int main(int argc, char *argv[]) {
       nwrite = cwrite(tap1_fd, buffer, nread);
     }
 
+    if(FD_ISSET(sockfd, &rd_set)) {
+      nread = recvfrom(sockfd, buffer, BUFSIZE, 0, (struct sockaddr*)&si_other, &slen);
+      if (nread<0) {
+       perror("recvfrom()");
+       exit(1);
+      }
+
+      printf("[CTRL] Read %d bytes from control socket\n",nread);
+      control(buffer, &nread, &act, &act2, retbuf, retbuf2);
+
+      if (nread>0) {
+        nwrite = sendto(sockfd, buffer, nread, 0, (struct sockaddr*)&si_other, slen);
+      }
+
+    }
   }
 
   return(0);
