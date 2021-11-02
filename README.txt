@@ -21,7 +21,6 @@ The system allows the use of a "3rd party" router, without putting it in the HH2
 
  - Supplies session ID to HH2
  - Gathers Host_Uniq for Openreach
- - Soon:tm:
 
 
 Nothing's done yet.
