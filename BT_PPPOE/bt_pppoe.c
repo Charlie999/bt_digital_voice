@@ -30,6 +30,11 @@ int PORT = 3334;
 char *progname;
 int debug = 1;
 
+int sockfd;
+int sockused = 0;
+
+struct sockaddr_in si_other;
+
 #define CONTROL_MAGIC 0xBEEFF00DBEEFF00D
 
 /**************************************************************************
@@ -273,32 +278,6 @@ void control(unsigned char* buffer, int *l, int *act, int *act2, unsigned char* 
   retbuf[off + HUL] = 0x01;
   retbuf[off + HUL + 1] = 0x05;
   retbuf[off + HUL + 2] = 0x00;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   retbuf[off + HUL + 3] = 0x01;
   retbuf[off + HUL + 4] = 0xFF;
 
@@ -414,6 +393,23 @@ void handle(unsigned char* buffer, int *l) {
    for (int i=0;i<5;i++) printf("%02X:",ONT_MAC[i]);
    printf("%02X\n",ONT_MAC[5]);
 
+   if (sockused) {
+    struct ctrlmsg sessid_msg;
+    sessid_msg.magic = CONTROL_MAGIC;
+    sessid_msg.type = CTRL_EVENT_SESSIONID;
+    sessid_msg.dlen = 14;
+    // CTRL_EVENT_SESSIONID
+    // | sessid(2b) | routermac(6b) | ontmac(6b) | (14b total)
+    memset(sessid_msg.data, 0, 16);
+    *((unsigned short*)sessid_msg.data) = htons(sessid);
+    memcpy(sessid_msg.data+2, ROUTER_MAC, 6);
+    memcpy(sessid_msg.data+8, ONT_MAC, 6);
+    int nwrite = sendto(sockfd, (unsigned char*)&sessid_msg, sizeof(struct ctrlmsg), 0, (struct sockaddr*)&si_other, sizeof(struct sockaddr));
+    printf("[CTRL] Written %d bytes to control socket\n", nwrite);
+   } else {
+    printf("[CTRL] WARNING: Unable to write sessid to control socket, sockused=0\n");
+   }
+
    hdbg("Setting PADS Host-Uniq code\n");
 
    unsigned char* ptr = (unsigned char*)(buffer + sizeof(struct ethhdr) + sizeof(struct padhdr));
@@ -500,7 +496,7 @@ int main(int argc, char *argv[]) {
 
   exit(0);
 */
-  int tap1_fd, tap2_fd, option, nread, nwrite, maxfd, sockfd;
+  int tap1_fd, tap2_fd, option, nread, nwrite, maxfd;
   char i1_name[IFNAMSIZ] = "";
   char i2_name[IFNAMSIZ] = "";
   int flags = IFF_TAP;
@@ -564,7 +560,7 @@ int main(int argc, char *argv[]) {
 
   fprintf(stderr, "Successfully connected to interfaces %s/%s\n", i1_name, i2_name);
 
-  struct sockaddr_in si_me, si_other;
+  struct sockaddr_in si_me;
 
   if ((sockfd=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
    perror("socket()");
@@ -648,6 +644,8 @@ int main(int argc, char *argv[]) {
        perror("recvfrom()");
        exit(1);
       }
+
+      sockused = 1;
 
       printf("[CTRL] Read %d bytes from control socket\n",nread);
       control(buffer, &nread, &act, &act2, retbuf, retbuf2);
