@@ -262,7 +262,7 @@ void control(unsigned char* buffer, int *l, int *act, int *act2, unsigned char* 
 
   padhdr->code = 167;
   padhdr->vertype = 0x11;
-  padhdr->len = htons(HUL + 4 + 5);
+  padhdr->len = htons(HUL + 4);
   padhdr->sessid = htons(SID);
 
   memcpy(pakhdr->h_source, ROUTER_MAC, 6);
@@ -275,18 +275,12 @@ void control(unsigned char* buffer, int *l, int *act, int *act2, unsigned char* 
   memset(retbuf+off, 0, 16);
   memcpy(retbuf+off, HU, HUL);
 
-  retbuf[off + HUL] = 0x01;
-  retbuf[off + HUL + 1] = 0x05;
-  retbuf[off + HUL + 2] = 0x00;
-  retbuf[off + HUL + 3] = 0x01;
-  retbuf[off + HUL + 4] = 0xFF;
+  fprintf(stderr, "[CTRL] PPPoE PADT send requested via control socket [s=%d]\n",off+18);
 
   memcpy(retbuf2, retbuf, 256);
 
-  fprintf(stderr, "[CTRL] PPPoE PADT send requested via control socket [s=%d]\n",off+18);
-
-  *act = off + HUL + 5;
-  *act2 = off + HUL + 5;
+  *act = 0;
+  *act2 = off + HUL;
  }
 
  *l = 0;
@@ -659,3 +653,4 @@ int main(int argc, char *argv[]) {
 
   return(0);
 }
+

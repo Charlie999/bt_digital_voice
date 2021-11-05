@@ -15,4 +15,4 @@ clean:
 #	$(INSTALL) -D bt_pppoe $(DESTDIR)$(BINDIR)/bt_pppoe
 
 macmask:
-	$(CC) bt_pppoe.c -o bt_pppoe -g
+	$(CC) bt_pppoe.c -o bt_pppoe
