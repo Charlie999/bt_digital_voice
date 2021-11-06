@@ -13,7 +13,8 @@
 #include "../BT_PPPOE/control.h"
 #include "../BT_PPPOE/pppoe.h"
 
-#define BT_PPPOE_HOST "172.20.31.202"
+char BT_PPPOE_HOST[16] = {0};
+char pppoe_server[256] = {0};
 #define BT_PPPOE_PORT 3334
 
 #define RXBUFSIZ 1500
@@ -28,7 +29,7 @@ int sockfd;
 int bpsock;
 
 void help() {
- printf("usage: %s -a <ifname> -R <ip> -L <ip>\n",pname);
+ printf("usage: %s -a <ifname> -R <ip> -L <ip> -B <ip> -b <rt_pppoe_bt server>\n",pname);
 }
 
 int main(int argc, char** argv) {
@@ -52,13 +53,19 @@ int main(int argc, char** argv) {
      case 'R':
         strncpy(ri, optarg, (strlen(optarg)>16)?16:strlen(optarg));
         break;
+     case 'B':
+        strncpy(BT_PPPOE_HOST, optarg, (strlen(optarg)>16)?16:strlen(optarg));
+        break;
+     case 'b':
+        strncpy(pppoe_server, optarg, (strlen(optarg)>256)?256:strlen(optarg));
+        break;
      default:
          help();
          exit(EXIT_FAILURE);
      }
  }
 
- if (strlen(ifname)==0 || strlen(li) == 0 || strlen(ri) == 0) {
+ if (strlen(ifname)==0 || strlen(li) == 0 || strlen(ri) == 0 || strlen(BT_PPPOE_HOST)==0 || strlen(pppoe_server)==0) {
   help();
   exit(EXIT_FAILURE);
  }
@@ -173,8 +180,6 @@ int main(int argc, char** argv) {
   sprintf(sessid_, "%d", sessid);
 
   printf("Running PPPoE-server\n");
-
-  const char *pppoe_server = "/home/charlie/bt_digital_voice/RP_PPPOE_BT/src/pppoe-server";
 
   pid_t child;
   if ((child = fork()) == 0) {
