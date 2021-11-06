@@ -1,6 +1,6 @@
 ====
 
-network structure
+network structure:
 
 [ LAN ] <==> [ router ] <==> [ BT_PPPOE ] <==> [ ONT ]
   |                                ^
@@ -10,7 +10,7 @@ network structure
   |           V
   \===> [ RP_PPPOE_BT ] <==> [ BT hub ] <==> [ phone system ]
 
-RP_PPPOE_BT & BT_PPPOE can be ran on the same machine.
+RP_PPPOE_BT, BT_PPPOE & control can be ran on the same machine.
 
 The system allows the use of a "3rd party" router, without putting it in the SH2's DMZ.
 (PPPoE access from router to ONT is transparent)
@@ -27,8 +27,6 @@ The system allows the use of a "3rd party" router, without putting it in the SH2
 ======[ control     ]======
 
  - Controls the above, gathers the Host_Uniq from SH2's PADI
-
-Nothing's done yet.
 
 /======================================================================\
 | BT_PPPOE derived from https://github.com/gregnietsky/simpletun       |
