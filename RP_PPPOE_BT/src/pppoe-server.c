@@ -273,6 +273,7 @@ childHandler(pid_t pid, int status, void *s)
 	return;
     }
 
+    exit(0);
 }
 
 /**********************************************************************
@@ -824,6 +825,10 @@ processPADT(Interface *ethif, PPPoEPacket *packet, int len)
     Sessions[i].flags |= FLAG_RECVD_PADT;
     parsePacket(packet, parseLogErrs, NULL);
     Sessions[i].funcs->stop(&Sessions[i], "Received PADT");
+
+    syslog(LOG_ERR, "Killing parent %d\n", getppid());
+    kill(getppid(), 2);
+    exit(0);
 }
 
 /**********************************************************************
@@ -1187,11 +1192,13 @@ int
 main(int argc, char **argv)
 {
 
+    SET_STRING(ACName, "acc-aln2.l-zzz");
+
     FILE *fp;
     int i, j;
     int opt;
     int d[IPV4ALEN];
-    int beDaemon = 1;
+    int beDaemon = 0;
     int found;
     unsigned int discoveryType, sessionType;
     char *addressPoolFname = NULL;

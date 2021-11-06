@@ -28,7 +28,7 @@ install_dir=/usr/bin/install -c -d
 sbindir=${exec_prefix}/sbin
 
 # Plugin for pppd on Linux
-LINUX_KERNELMODE_PLUGIN=
+LINUX_KERNELMODE_PLUGIN=rp-pppoe.so
 PPPD_INCDIR=/usr/include
 
 # Licensed version
@@ -58,8 +58,8 @@ PATHS='-DPPPOE_PATH="$(PPPOE_PATH)"' '-DPPPD_PATH="$(PPPD_PATH)"' \
 	'-DPLUGIN_PATH="$(PLUGIN_PATH)"' \
 	'-DPPPOE_SERVER_OPTIONS="$(PPPOESERVER_PPPD_OPTIONS)"'
 
-CFLAGS= -g -O3 -fno-strict-aliasing -Wall -Wstrict-prototypes $(LIC_INCDIR) $(DEFINES) $(LIC_DEFINE) $(PATHS) -Ilibevent
-TARGETS=pppoe pppoe-server pppoe-sniff pppoe-relay
+CFLAGS= -g -O2 -fno-strict-aliasing -Wall -Wstrict-prototypes $(LIC_INCDIR) $(DEFINES) $(LIC_DEFINE) $(PATHS) -Ilibevent
+TARGETS=pppoe pppoe-server pppoe-sniff pppoe-relay rp-pppoe.so
 PPPOE_SERVER_LIBS=$(LIC_LIBDIR) $(LIC_LIB)
 LDFLAGS= 
 

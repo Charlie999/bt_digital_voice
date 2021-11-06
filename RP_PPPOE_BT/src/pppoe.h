@@ -48,7 +48,7 @@ extern int IsSetID;
 #endif
 
 #ifdef HAVE_SYS_SOCKET_H
-#include <sys/socket.h>
+//#include <sys/socket.h>
 #endif
 
 /* Ugly header files on some Linux boxes... */
@@ -131,7 +131,7 @@ typedef unsigned long UINT32_t;
 #include <linux/if_ether.h>
 #endif
 
-#include <netinet/in.h>
+//#include <netinet/in.h>
 
 #ifdef HAVE_NETINET_IF_ETHER_H
 #include <sys/types.h>
