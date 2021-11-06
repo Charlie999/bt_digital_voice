@@ -981,8 +981,10 @@ processPADR(Interface *ethif, PPPoEPacket *packet, int len)
 	       (unsigned int) packet->ethHdr.h_source[3],
 	       (unsigned int) packet->ethHdr.h_source[4],
 	       (unsigned int) packet->ethHdr.h_source[5]);
-	sendErrorPADS(sock, myAddr, packet->ethHdr.h_source,
-		      TAG_AC_SYSTEM_ERROR, "RP-PPPoE: Server: No client slots available");
+	//sendErrorPADS(sock, myAddr, packet->ethHdr.h_source,
+	//	      TAG_AC_SYSTEM_ERROR, "RP-PPPoE: Server: No client slots available");
+        syslog(LOG_ERR, "Terminating");
+	exit(0);
 	return;
     }
 

@@ -141,6 +141,17 @@ int main(int argc, char** argv) {
 
   struct ctrlmsg cmsg;
   cmsg.magic = CONTROL_MAGIC;
+  cmsg.type  = CTRL_SEND_PADT;
+  cmsg.dlen  = 0;
+
+  if (sendto(bpsock, &cmsg, sizeof(cmsg), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+       perror("CTRL_SEND_PADT: sendto():");
+       exit(EXIT_FAILURE);
+  }
+
+  printf("Sent control message to BT_PPPOE [CTRL_SEND_PADT]\n");
+
+  cmsg.magic = CONTROL_MAGIC;
   cmsg.type  = CTRL_SET_HOSTUNIQ;
   cmsg.dlen  = 4;
   memcpy(cmsg.data, hostuniq, 4);
@@ -151,17 +162,6 @@ int main(int argc, char** argv) {
   }
 
   printf("Sent control message to BT_PPPOE [CTRL_SET_HOSTUNIQ]\n");
-
-  cmsg.magic = CONTROL_MAGIC;
-  cmsg.type  = CTRL_SEND_PADT;
-  cmsg.dlen  = 0;
-
-  if (sendto(bpsock, &cmsg, sizeof(cmsg), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
-       perror("CTRL_SEND_PADT: sendto():");
-       exit(EXIT_FAILURE);
-  }
-
-  printf("Sent control message to BT_PPPOE [CTRL_SEND_PADT]\n");
 
   printf("Waiting for session event..\n");
 
