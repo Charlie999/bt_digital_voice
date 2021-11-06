@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
  char li[16] = {0};
  char ri[16] = {0};
 
- while ((opt = getopt(argc, argv, "a:R:L:")) != -1) {
+ while ((opt = getopt(argc, argv, "a:R:L:B:b:")) != -1) {
      switch (opt) {
      case 'a':
         strncpy(ifname, optarg, (strlen(optarg)>IFNAMSIZ)?IFNAMSIZ:strlen(optarg));
