@@ -17,6 +17,8 @@ int _bt_pppoe_ont_egress(struct __sk_buff *skb) {
 
 	if (data + sizeof(*eth) > end) return TC_ACT_OK;
 
+	if (eth->h_proto == ___constant_swab16((0x8864))) return TC_ACT_OK;
+
 	if (eth->h_proto == ___constant_swab16((ROUTER_ETHERTYPE_SUB))) return TC_ACT_SHOT;
 	if (eth->h_proto == ___constant_swab16((ONT_ETHERTYPE_SUB))) {
 		eth->h_proto = ___constant_swab16((0x8863));
