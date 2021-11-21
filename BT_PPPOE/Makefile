@@ -1,6 +1,8 @@
 PREFIX=/usr
 BINDIR=$(PREFIX)/bin
 
+CFLAGS=-Ofast -I..
+
 CC=gcc
 INSTALL=ginstall
 
@@ -15,4 +17,4 @@ clean:
 #	$(INSTALL) -D bt_pppoe $(DESTDIR)$(BINDIR)/bt_pppoe
 
 macmask:
-	$(CC) bt_pppoe.c -o bt_pppoe
+	$(CC) bt_pppoe.c -o bt_pppoe $(CFLAGS)

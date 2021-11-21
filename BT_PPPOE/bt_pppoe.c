@@ -16,14 +16,16 @@
 #include <errno.h>
 #include <stdarg.h>
 
+#include <bpf/ethertypes.h>
+
 #include "pppoe.h"
 #include "control.h"
 
 #define BUFSIZE 1600
 void my_err(char *msg, ...);
 
-char HU[17] = "PC1";
-short HUL = 3;
+char HU[17] = "\xAA\xBB\xCC\xDD";
+short HUL = 4;
 
 int PORT = 3334;
 
@@ -179,11 +181,10 @@ void hdbg(char *msg, ...) {
  **************************************************************************/
 void usage(void) {
   fprintf(stderr, "Usage:\n");
-  fprintf(stderr, "%s -a <ifacename> -b <ifacename>\n", progname);
+  fprintf(stderr, "%s -i \n", progname);
   fprintf(stderr, "%s -h\n", progname);
   fprintf(stderr, "\n");
-  fprintf(stderr, "-a <ifacename>: Name of interface to use (mandatory)\n");
-  fprintf(stderr, "-b <ifacename>: Name of interface to use (mandatory)\n");
+  fprintf(stderr, "-i <ifacename>: Name of interface to use (mandatory)\n");
   exit(1);
 }
 
@@ -277,10 +278,10 @@ void control(unsigned char* buffer, int *l, int *act, int *act2, unsigned char* 
 
   fprintf(stderr, "[CTRL] PPPoE PADT send requested via control socket [s=%d]\n",off+18);
 
-  memcpy(retbuf2, retbuf, 256);
+  // memcpy(retbuf2, retbuf, 256);
 
-  *act = 0;
-  *act2 = off + HUL;
+  // *act = 0;
+  *act = off + HUL;
  }
 
  *l = 0;
@@ -288,9 +289,19 @@ void control(unsigned char* buffer, int *l, int *act, int *act2, unsigned char* 
 
 // handle PPPoE packets
 void handle(unsigned char* buffer, int *l) {
-  int lr = *l;
+ int lr = *l;
  struct ethhdr *hdr = (struct ethhdr*)buffer;
- if (hdr->h_proto == 0x6388) {
+// printf("hdr_prot=0x%04X\n",ntohs(hdr->h_proto));
+ if (hdr->h_proto != htons(0xC000)) {
+   *l = 0;
+   return;
+ } else {
+  hdr->h_proto = 0x6388;
+  if (HUL == 0) {
+    *l = 0;
+    return;
+  }
+
   struct padhdr *pad = (struct padhdr*)(buffer + sizeof(struct ethhdr));
 
   unsigned short sessid = ntohs(pad->sessid);
@@ -302,7 +313,7 @@ void handle(unsigned char* buffer, int *l) {
    memcpy(ROUTER_MAC, hdr->h_source, 6);
 
    hdbg("Setting PPPoE Host-Uniq value to [");
-   for (int i=0;i<HUL;i++) fprintf(stderr,"%02X",HU[i]);
+   for (int i=0;i<HUL;i++) fprintf(stderr,"%02X",(unsigned char)HU[i]);
    fprintf(stderr,", l=%d]\n",HUL);
 
    unsigned char* ptr = (unsigned char*)(buffer + sizeof(struct ethhdr) + sizeof(struct padhdr));
@@ -310,25 +321,33 @@ void handle(unsigned char* buffer, int *l) {
     unsigned short a = ntohs(*(unsigned short*)ptr);
     unsigned short b = ntohs(*(unsigned short*)(ptr+2));
 
+//    if (a==0 && b==0) {
+//	break;
+//    }
+
     if (a == 259) {
-     *(unsigned short*)ptr = htons(261);
+     // \*(unsigned short*)ptr = htons(261);
      memcpy(LHU, ptr+4, b);
      LHUL = b;
      hdbg("Old Host-Uniq: ");
-     for (int k=0;k<LHUL;k++) fprintf(stderr,"%02X",LHU[k]);
+     for (int k=0;k<LHUL;k++) fprintf(stderr,"%02X",(unsigned char)LHU[k]);
      fprintf(stderr,"\n");
+     memcpy(ptr+4, HU, LHUL); // DrayTek Vigor sends four char PADI anyway.
+     break;
     }
 
     ptr+=1;
     if ((size_t)(ptr-buffer) >= lr) break;
    }
 
-   *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
+   hdr->h_proto = htons(ONT_ETHERTYPE_SUB);
+
+   /* *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
    *(unsigned short*)ptr = htons(HUL); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2);
 
-   memcpy(ptr, HU, HUL); lr+=HUL; pad->len=htons(ntohs(pad->len)+HUL);
+   memcpy(ptr, HU, HUL); lr+=HUL; pad->len=htons(ntohs(pad->len)+HUL);*/
 
-   *l = lr;
+   //\*l = lr;
   } else if (pad->code == 7) { //PADO PACKET
    memcpy(ONT_MAC, hdr->h_source, 6);
 
@@ -340,20 +359,23 @@ void handle(unsigned char* buffer, int *l) {
     unsigned short b = ntohs(*(unsigned short*)(ptr+2));
 
     if (a == 259) {
-     *(unsigned short*)ptr = htons(261);
+     //\*(unsigned short*)ptr = htons(261);
      hdbg("Modifying PADO Host-Uniq tag..\n");
+     memcpy(ptr+4, LHU, 4);
     }
 
     ptr+=1;
     if ((size_t)(ptr-buffer) >= lr) {/*ptr = buffer + len;*/ break;}
    }
 
-   *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
+   hdr->h_proto = htons(ROUTER_ETHERTYPE_SUB);
+
+   /*(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
    *(unsigned short*)ptr = htons(LHUL); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2);
 
-   memcpy(ptr, LHU, LHUL); lr+=LHUL; pad->len=htons(ntohs(pad->len)+LHUL); ptr+=LHUL;
+   memcpy(ptr, LHU, LHUL); lr+=LHUL; pad->len=htons(ntohs(pad->len)+LHUL); ptr+=LHUL;*/
 
-   *l = lr;
+   //\*l = lr;
   } else if (pad->code == 25) { //PADR PACKET
    hdbg("Setting PADR Host-Uniq tag\n");
 
@@ -363,20 +385,24 @@ void handle(unsigned char* buffer, int *l) {
     unsigned short b = ntohs(*(unsigned short*)(ptr+2));
 
     if (a == 259) {
-     *(unsigned short*)ptr = htons(261);
+     //\*(unsigned short*)ptr = htons(261);
      hdbg("Modifying PADR Host-Uniq tag..\n");
+     memcpy(ptr+4, HU, 4);
     }
 
     ptr+=1;
     if ((size_t)(ptr-buffer) >= lr) {/*ptr = buffer + len;*/ break;}
    }
 
+   hdr->h_proto = htons(ONT_ETHERTYPE_SUB);
+/*
    *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
    *(unsigned short*)ptr = htons(HUL); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2);
 
    memcpy(ptr, HU, HUL); lr+=HUL; pad->len=htons(ntohs(pad->len)+HUL); ptr+=HUL;
 
    *l = lr;
+*/
   } else if (pad->code == 101) { //PADS PACKET
    printf("==> PADS SESSION ID = 0x%04X\n",sessid);
    SID = sessid;
@@ -412,20 +438,23 @@ void handle(unsigned char* buffer, int *l) {
     unsigned short b = ntohs(*(unsigned short*)(ptr+2));
 
     if (a == 259) {
-     *(unsigned short*)ptr = htons(261);
+//     *(unsigned short*)ptr = htons(261);
      hdbg("Modifying PADS Host-Uniq tag..\n");
+     memcpy(ptr+4, LHU, 4);
     }
 
     ptr+=1;
     if ((size_t)(ptr-buffer) >= lr) {/*ptr = buffer + len;*/ break;}
    }
 
-   *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
-   *(unsigned short*)ptr = htons(LHUL); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2);
+   hdr->h_proto = htons(ROUTER_ETHERTYPE_SUB);
 
-   memcpy(ptr, LHU, LHUL); lr+=LHUL; pad->len=htons(ntohs(pad->len)+LHUL); ptr+=LHUL;
+ //  *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
+ //  *(unsigned short*)ptr = htons(LHUL); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2);
 
-   *l = lr;
+  // memcpy(ptr, LHU, LHUL); lr+=LHUL; pad->len=htons(ntohs(pad->len)+LHUL); ptr+=LHUL;
+
+ //  *l = lr;
   } else if (pad->code == 167) { //PADT PACKET
    hdbg("Setting PADT Host-Uniq code\n");
 
@@ -444,13 +473,17 @@ void handle(unsigned char* buffer, int *l) {
      *(unsigned short*)ptr = htons(261);
      hdbg("Modifying PADT Host-Uniq tag..\n");
      memcpy(tp, ptr+4, b);
-     ppr = 1;
+     memcpy(ptr+4, HU, 4);
+//     ppr = 1;
     }
 
     ptr+=1;
     if ((size_t)(ptr-buffer) >= lr) {/*ptr = buffer + len;*/ break;}
-   }
 
+
+    //system("pgrep pppoe-server | xargs kill");
+   }
+/*
    if (ppr) {
     if (!memcmp(tp, t2, 256)) {
      *(unsigned short*)ptr = htons(259); ptr+=2; lr+=2; pad->len=htons(ntohs(pad->len)+2); // extending packet (oooo)  
@@ -464,8 +497,8 @@ void handle(unsigned char* buffer, int *l) {
      memcpy(ptr, HU, HUL); lr+=HUL; pad->len=htons(ntohs(pad->len)+HUL); ptr+=HUL;
     }
    }
-
-   *l = lr;
+*/
+//   *l = lr;
   }
  }
 }
@@ -490,9 +523,8 @@ int main(int argc, char *argv[]) {
 
   exit(0);
 */
-  int tap1_fd, tap2_fd, option, nread, nwrite, maxfd;
+  int tap_fd, option, nread, nwrite, maxfd;
   char i1_name[IFNAMSIZ] = "";
-  char i2_name[IFNAMSIZ] = "";
   int flags = IFF_TAP;
   unsigned char buffer[1600];
 
@@ -501,14 +533,14 @@ int main(int argc, char *argv[]) {
   progname = argv[0];
   
   /* Check command line options */
-  while((option = getopt(argc, argv, "a:b:h")) > 0) {
+  while((option = getopt(argc, argv, "i:h")) > 0) {
     switch(option) {
-      case 'a':
+      case 'i':
         strncpy(i1_name,optarg, IFNAMSIZ-1);
         break;
-      case 'b':
-        strncpy(i2_name,optarg, IFNAMSIZ-1);
-        break;
+      //case 'b':
+      //  strncpy(i2_name,optarg, IFNAMSIZ-1);
+      //  break;
       default:
         my_err("Unknown option %c\n", option);
         usage();
@@ -525,34 +557,28 @@ int main(int argc, char *argv[]) {
     usage();
   }
 
-  if(*i1_name == '\0' || *i2_name == '\0') {
+  if(*i1_name == '\0') {
     my_err("Must specify interface name!\n");
     usage();
   }
 
   /* initialize tun/tap interface */
-  if ( (tap1_fd = tun_alloc(i1_name, flags | IFF_NO_PI)) < 0 ) {
+  if ( (tap_fd = tun_alloc(i1_name, flags | IFF_NO_PI)) < 0 ) {
     my_err("Error connecting to tun/tap interface 1 %s!\n", i1_name);
     exit(1);
   }
 
-  if ( (tap2_fd = tun_alloc(i2_name, flags | IFF_NO_PI)) < 0 ) {
-    my_err("Error connecting to tun/tap interface 2 %s!\n", i2_name);
-    exit(1);
-  }
-
   ifup(i1_name);
-  ifup(i2_name);
 
   char cmd[256];
   sprintf(cmd, "/usr/sbin/brctl addif br0 %s", i1_name);
   fprintf(stderr, "=> %s\n",cmd);
   system(cmd);
-  sprintf(cmd, "/usr/sbin/brctl addif br1 %s", i2_name);
+  sprintf(cmd, "/usr/sbin/ip link set %s mtu 1508", i1_name);
   fprintf(stderr, "=> %s\n",cmd);
   system(cmd);
 
-  fprintf(stderr, "Successfully connected to interfaces %s/%s\n", i1_name, i2_name);
+  fprintf(stderr, "Successfully connected to interface %s\n", i1_name);
 
   struct sockaddr_in si_me;
 
@@ -575,64 +601,46 @@ int main(int argc, char *argv[]) {
   fprintf(stderr, "Created control socket\n");
 
   /* use select() to handle two descriptors at once */
-  maxfd = (tap1_fd > tap2_fd)?tap1_fd:tap2_fd;
-  maxfd = (maxfd > sockfd)?maxfd:sockfd;
+  maxfd = (tap_fd > sockfd)?tap_fd:sockfd;
 
   int act = 0;
   int act2 = 0;
   unsigned char retbuf[257], retbuf2[257];
 
+  int set;
+  fd_set rd_set;
+
   while(1) {
     int ret;
-    fd_set rd_set;
 
     nwrite = 0;
 
     FD_ZERO(&rd_set);
-    FD_SET(tap1_fd, &rd_set); FD_SET(tap2_fd, &rd_set); FD_SET(sockfd, &rd_set);
+    FD_SET(tap_fd, &rd_set); FD_SET(sockfd, &rd_set);
 
     ret = select(maxfd + 1, &rd_set, NULL, NULL, NULL);
 
-    if (ret < 0 && errno == EINTR){
-      continue;
-    }
-
     if (ret < 0) {
+      if (errno == EINTR) continue;
       perror("select()");
       exit(1);
     }
 
-    if (act2) {
-        cwrite(tap2_fd, retbuf2, act2);
-        printf("[CTRL] Sent retbuf2 [s=%d]\n", act2);
-        act2 = 0;
-    } else if (act) {
-        cwrite(tap1_fd, retbuf, act);
-        printf("[CTRL] Sent retbuf1 [s=%d]\n", act);
-        act = 0;
-    }
-
-    if(FD_ISSET(tap1_fd, &rd_set)) {
+    if(FD_ISSET(tap_fd, &rd_set)) {
       /* data from tap1, write to tap2 */
 
-      nread = cread(tap1_fd, buffer, BUFSIZE);
+      nread = read(tap_fd, buffer, BUFSIZE);
 
       handle(buffer, &nread);
 
-      nwrite = cwrite(tap2_fd, buffer, nread);
-    }
+      if (nread)
+	      nwrite = cwrite(tap_fd, buffer, nread);
 
-    if(FD_ISSET(tap2_fd, &rd_set)) {
-      /* data from tap2, write to tap1 */
-
-      nread = cread(tap2_fd, buffer, BUFSIZE);
-
-      handle(buffer, &nread);
-
-      nwrite = cwrite(tap1_fd, buffer, nread);
-    }
-
-    if(FD_ISSET(sockfd, &rd_set)) {
+      if (nread < 0) {
+	perror("read(): ");
+	exit(EXIT_FAILURE);
+      }
+    } else if(FD_ISSET(sockfd, &rd_set)) {
       nread = recvfrom(sockfd, buffer, BUFSIZE, 0, (struct sockaddr*)&si_other, &slen);
       if (nread<0) {
        perror("recvfrom()");
@@ -646,6 +654,12 @@ int main(int argc, char *argv[]) {
 
       if (nread>0) {
         nwrite = sendto(sockfd, buffer, nread, 0, (struct sockaddr*)&si_other, slen);
+      }
+
+      if (act) {
+	cwrite(tap_fd, retbuf, act);
+	printf("[CTRL] Sent retbuf\n");
+	act = 0;
       }
 
     }
